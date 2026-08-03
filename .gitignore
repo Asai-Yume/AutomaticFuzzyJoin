@@ -1,2 +1,11 @@
 .DS_Store
 *.pyc
+
+# datasets
+data/
+
+# output artifacts
+outputs/
+
+# running batch files
+*.bat

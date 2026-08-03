@@ -1,17 +1,31 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: autofj
 Version: 0.0.6
 Summary: Auto-Program Fuzzy Similarity Joins Without Labeled Examples
 Home-page: https://github.com/chu-data-lab/AutomaticFuzzyJoin
 Author: Peng Li
 Author-email: lipengpublic@gmail.com
-License: UNKNOWN
-Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.7
 Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: nltk
+Requires-Dist: ngram
+Requires-Dist: editdistance
+Requires-Dist: jellyfish
+Requires-Dist: spacy
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 # AutoFJ
 
@@ -154,4 +168,3 @@ Join left table and right table.
     A table of joining pairs. The columns of left table are
     suffixed with "_l" and the columns of right table are suffixed
     with "_r".
-

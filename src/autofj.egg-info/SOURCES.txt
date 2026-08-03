@@ -12,7 +12,6 @@ src/autofj.egg-info/SOURCES.txt
 src/autofj.egg-info/dependency_links.txt
 src/autofj.egg-info/requires.txt
 src/autofj.egg-info/top_level.txt
-src/autofj/benchmark/.DS_Store
 src/autofj/benchmark/Amphibian/gt.csv
 src/autofj/benchmark/Amphibian/left.csv
 src/autofj/benchmark/Amphibian/right.csv
@@ -179,3 +178,4 @@ src/autofj/join_function_space/join_function/tokenizer.py
 src/autofj/optimizer/__init__.py
 src/autofj/optimizer/autofj_multi_column_greedy_algorithm.py
 src/autofj/optimizer/autofj_single_column_greedy_algorithm.py
+tests/test_autofj.py

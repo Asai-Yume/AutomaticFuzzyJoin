@@ -83,23 +83,43 @@ class NegativeRule(object):
         return LR
 
     def apply(self, LR_blocked):
-        """Apply opposite rule on LR blocked"""
-        # merge LR with left, right
+        """Apply opposite rules to left-right blocking candidates.
+
+        Return an empty candidate table with the expected ID columns when
+        blocking produced no candidates or when every candidate is filtered.
+        """
+        id_columns = [
+            self.id_column + "_l",
+            self.id_column + "_r",
+        ]
+
+        if LR_blocked.empty:
+            return pd.DataFrame(columns=id_columns)
+
+        # merge LR with left and right records
         LR = self._merge(self.left, self.right, LR_blocked)
+        if LR.empty:
+            return pd.DataFrame(columns=id_columns)
 
         # get token difference
-        l_diff, r_diff = self.get_tokens_diff(LR["value_l"].values,
-                                              LR["value_r"].values)
+        l_diff, r_diff = self.get_tokens_diff(
+            LR["value_l"].values,
+            LR["value_r"].values,
+        )
 
-        # apply rule
+        # Apply rules. A Boolean Series is used deliberately: an empty Python
+        # list passed as LR[[]] is interpreted by pandas as a column selector,
+        # which removes all columns and caused the original KeyError.
         mask = []
-        for lid, rid, l_d, r_d in zip(LR["autofj_id_l"].values,
-                                      LR["autofj_id_r"].values,
-                                      l_diff,
-                                      r_diff):
+        for lid, rid, l_d, r_d in zip(
+            LR[self.id_column + "_l"].values,
+            LR[self.id_column + "_r"].values,
+            l_diff,
+            r_diff,
+        ):
             pairs = [(l, r) for l in l_d for r in r_d]
-            meet_rule = any([p in self.negative_rules for p in pairs])
+            meet_rule = any(p in self.negative_rules for p in pairs)
             mask.append(not meet_rule)
 
-        LR_blocked = LR[mask][["autofj_id_l", "autofj_id_r"]]
-        return LR_blocked
+        boolean_mask = pd.Series(mask, index=LR.index, dtype=bool)
+        return LR.loc[boolean_mask, id_columns].reset_index(drop=True)

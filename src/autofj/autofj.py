@@ -144,6 +144,22 @@ class AutoFJ(object):
         LL_blocked = self.blocker.block(left, left, "autofj_id")
         LR_blocked = self.blocker.block(left, right, "autofj_id")
 
+        # Blocking defines the candidate universe. If no left-right candidates
+        # survive, AutoFJ cannot produce any matches. Return a correctly shaped
+        # empty result rather than sending an empty table into later stages.
+        if LR_blocked.empty:
+            if self.verbose:
+                print_log(
+                    "No left-right candidate pairs survived blocking; "
+                    "returning an empty join result."
+                )
+            return pd.DataFrame(
+                columns=(
+                    [c + "_l" for c in left_table.columns]
+                    + [c + "_r" for c in right_table.columns]
+                )
+            )
+
         # remove equi-joins on LL
         LL_blocked = LL_blocked[
             LL_blocked["autofj_id_l"] != LL_blocked["autofj_id_r"]]
@@ -152,6 +168,22 @@ class AutoFJ(object):
         nr = NegativeRule(left, right, "autofj_id")
         nr.learn(LL_blocked)
         LR_blocked = nr.apply(LR_blocked)
+
+        # Negative rules may remove every blocked left-right pair. This has the
+        # same semantics as an empty blocker result: there are no possible
+        # predictions remaining.
+        if LR_blocked.empty:
+            if self.verbose:
+                print_log(
+                    "No left-right candidate pairs remain after negative-rule "
+                    "filtering; returning an empty join result."
+                )
+            return pd.DataFrame(
+                columns=(
+                    [c + "_l" for c in left_table.columns]
+                    + [c + "_r" for c in right_table.columns]
+                )
+            )
 
         # create join function space
         jf_space = AutoFJJoinFunctionSpace(self.join_function_space,

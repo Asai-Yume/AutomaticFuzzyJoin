@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from ..utils import print_log
 from multiprocessing import Pool
 from functools import partial
@@ -6,6 +7,67 @@ from .join_function.autofj_join_function import AutoFJJoinFunction
 from .options import autofj_lg, autofj_md, autofj_sm
 import os
 import shutil
+
+
+
+def _distance_to_1d(values, expected_length, label):
+    """Normalize a distance result into one value per blocked record pair.
+
+    Older AutoFJ distance functions may return a pandas DataFrame or a NumPy
+    array with shape (n, 1). Some functions also return an empty two-column
+    table when there are zero blocked pairs. In that zero-pair case, any
+    zero-sized result represents the same valid empty distance vector.
+    """
+    # When there are no blocked pairs, there are no distances to retain. Some
+    # legacy join functions return an empty table with the two ID columns,
+    # giving shape (0, 2), rather than an empty Series with shape (0,).
+    if expected_length == 0:
+        if isinstance(values, (pd.DataFrame, pd.Series)):
+            if len(values) == 0:
+                return np.empty(0, dtype=float)
+        else:
+            empty_array = np.asarray(values)
+            if empty_array.size == 0:
+                return np.empty(0, dtype=float)
+        raise ValueError(
+            f"{label} returned non-empty data for zero blocked pairs."
+        )
+
+    if isinstance(values, pd.DataFrame):
+        if values.shape[1] != 1:
+            raise ValueError(
+                f"{label} returned a DataFrame with shape {values.shape}; "
+                "expected exactly one distance column."
+            )
+        array = values.iloc[:, 0].to_numpy()
+    elif isinstance(values, pd.Series):
+        array = values.to_numpy()
+    else:
+        array = np.asarray(values)
+
+    if array.ndim == 0:
+        if expected_length == 1:
+            array = array.reshape(1)
+        else:
+            raise ValueError(
+                f"{label} returned a scalar for {expected_length} blocked pairs."
+            )
+    elif array.ndim == 2 and 1 in array.shape:
+        array = array.reshape(-1)
+    elif array.ndim != 1:
+        raise ValueError(
+            f"{label} returned an array with shape {array.shape}; "
+            "expected one distance per blocked pair."
+        )
+
+    if len(array) != expected_length:
+        raise ValueError(
+            f"{label} returned {len(array)} distances for "
+            f"{expected_length} blocked pairs."
+        )
+
+    return array
+
 
 class AutoFJJoinFunctionSpace(object):
     """AutoFJ Configuration Space. The space is specified by the space of join
@@ -151,8 +213,16 @@ class AutoFJJoinFunctionSpace(object):
                     "autofj_id_r": LR_blocked["autofj_id_r"].values}
 
             LL_d, LR_d = column_distances[i]
-            LL_distance[jf_name][c] = LL_d
-            LR_distance[jf_name][c] = LR_d
+            LL_distance[jf_name][c] = _distance_to_1d(
+                LL_d,
+                len(LL_blocked),
+                f"LL distance for join function {jf_name!r}, column {c!r}",
+            )
+            LR_distance[jf_name][c] = _distance_to_1d(
+                LR_d,
+                len(LR_blocked),
+                f"LR distance for join function {jf_name!r}, column {c!r}",
+            )
 
         for jf_name in LL_distance.keys():
             LL_distance[jf_name] = pd.DataFrame(LL_distance[jf_name])

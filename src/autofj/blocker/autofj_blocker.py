@@ -49,6 +49,11 @@ class AutoFJBlocker(object):
         """
         self.id_column = id_column
 
+        # AutoFJ calls block(left, left, ...) to create presumed-negative
+        # reference/reference pairs. Detect that exact self-join so a record
+        # does not consume its own top-k candidate slot.
+        is_self_join = left_table is right_table
+
         # preprocess records
         left = self._preprocess(left_table, id_column)
         right = self._preprocess(right_table, id_column)
@@ -62,8 +67,32 @@ class AutoFJBlocker(object):
             left)
 
         # get candidates for each right record
-        result = self._get_candidates_multi(right, token_lid_map,
-                                      token_idf_map, token_tf_map)
+        result = self._get_candidates_multi(
+            right,
+            token_lid_map,
+            token_idf_map,
+            token_tf_map,
+            exclude_self=is_self_join,
+        )
+
+        # If a duplicate-free reference table has no lexical overlap between
+        # distinct records, blocking can produce no LL candidates at all.
+        # AutoFJ's optimizer requires at least one presumed-negative LL pair.
+        # Use one deterministic cyclic non-self partner per reference record.
+        # This is only a fallback for the completely empty self-join case.
+        if is_self_join and result.empty:
+            left_ids = left["id"].tolist()
+            if len(left_ids) < 2:
+                raise ValueError(
+                    "AutoFJ requires at least two distinct left/reference rows "
+                    "to construct presumed-negative LL calibration pairs."
+                )
+            result = pd.DataFrame(
+                {
+                    "id_l": left_ids[1:] + left_ids[:1],
+                    "id_r": left_ids,
+                }
+            )
 
         result = result.rename(columns={"id_l": id_column+"_l",
                                         "id_r": id_column + "_r"})
@@ -154,7 +183,7 @@ class AutoFJBlocker(object):
         return token_lid_map, token_idf_map, token_tf_map
 
     def _get_candidates(self, right, token_lid_map, token_idf_map,
-                            token_tf_map):
+                            token_tf_map, exclude_self=False):
         """ Get candidates for one record in right table
         Parameters:
         -----------
@@ -190,6 +219,12 @@ class AutoFJBlocker(object):
                     counter[lid] += token_idf_map[token] *\
                                     token_tf_map[lid][token]
 
+            # During left/left blocking, a row is always its own strongest
+            # candidate. Remove it before applying the top-k limit so the
+            # candidate budget is reserved for distinct reference records.
+            if exclude_self:
+                counter.pop(rid, None)
+
             if len(counter) <= self.num_candidates:
                 candidate_lids = list(counter.keys())
             else:
@@ -205,7 +240,7 @@ class AutoFJBlocker(object):
         return result
 
     def _get_candidates_multi(self, right, token_lid_map, token_idf_map,
-                            token_tf_map):
+                            token_tf_map, exclude_self=False):
         """ Get candidates for one record in right table using multiple cpus
         Parameters:
         -----------
@@ -230,8 +265,13 @@ class AutoFJBlocker(object):
             record pairs
         """
         right_groups = np.array_split(right, self.n_jobs)
-        func = partial(self._get_candidates, token_lid_map=token_lid_map,
-                       token_idf_map=token_idf_map, token_tf_map=token_tf_map)
+        func = partial(
+            self._get_candidates,
+            token_lid_map=token_lid_map,
+            token_idf_map=token_idf_map,
+            token_tf_map=token_tf_map,
+            exclude_self=exclude_self,
+        )
 
         with Pool(self.n_jobs) as pool:
             results = pool.map(func, right_groups)
